@@ -1,0 +1,4 @@
+- hosts: all
+  tasks:
+
+    - name: Allow access to CDN only to mimic air-gapped systems with access to Satellite only
