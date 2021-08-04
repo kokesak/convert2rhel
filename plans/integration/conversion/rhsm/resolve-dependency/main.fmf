@@ -6,12 +6,10 @@ provision:
   develop: true
 
 prepare+:
-    - name: install dependency packages and do the conversion
+    - name: install dependency packages
       how: shell
-      script: pytest -svv tests/integration/resolve-dependency/install_dependency_packages.py
-    - name: reboot
-      how: ansible
-      playbook: tests/ansible_collections/reboot.yml
+      script: pytest -svv tests/integration/conversion/rhsm/resolve-dependency/install_dependency_packages.py
+      order: 60
 
 /centos7:
   discover+:

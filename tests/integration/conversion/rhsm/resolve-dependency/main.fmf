@@ -2,7 +2,7 @@ summary: resolve-dependency
 tag+:
   - centos7
   - oracle7
-  - Aresolve-dependency
+  - resolve-dependency
 adjust:
   enabled: false
   when: >
