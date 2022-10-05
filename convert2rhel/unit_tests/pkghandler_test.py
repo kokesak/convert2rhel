@@ -42,6 +42,59 @@ from convert2rhel.unit_tests import GetLoggerMocked, is_rpm_based_os, run_subpro
 from convert2rhel.unit_tests.conftest import all_systems, centos8
 
 
+class QueryMocked(unit_tests.MockFunction):
+    def __init__(self):
+        self.filter_called = 0
+        self.installed_called = 0
+        self.stop_iteration = False
+        self.pkg_obj = None
+
+    def __call__(self, *args):
+        self._setup_pkg()
+        return self
+
+    def __iter__(self):  # pylint: disable=non-iterator-returned
+        return self
+
+    def __next__(self):
+        if self.stop_iteration or not self.pkg_obj:
+            self.stop_iteration = False
+            raise StopIteration
+        self.stop_iteration = True
+        return self.pkg_obj
+
+    def _setup_pkg(self):
+        self.pkg_obj = TestPkgHandler.TestPkgObj()
+        self.pkg_obj.name = "installed_pkg"
+
+    def filterm(self, empty):
+        # Called internally in DNF when calling fill_sack - ignore, not needed
+        pass
+
+    def installed(self):
+        self.installed_called += 1
+        return self
+
+    def filter(self, version__glob, release__glob, arch__glob, name__glob):
+        self.filter_called += 1
+        if name__glob and name__glob == "installed_pkg":
+            self._setup_pkg()
+        elif name__glob:
+            self.pkg_obj = None
+        return self
+
+
+class ReturnPackagesMocked(unit_tests.MockFunction):
+    def __call__(self, patterns=None):
+        if patterns:
+            if "non_existing" in patterns:
+                return []
+
+        pkg_obj = TestPkgHandler.TestPkgObj()
+        pkg_obj.name = "installed_pkg"
+        return [pkg_obj]
+
+
 class TestPkgHandler(unit_tests.ExtendedTestCase):
     class GetInstalledPkgsWithFingerprintMocked(unit_tests.MockFunction):
         def __init__(self, data=None):
@@ -536,91 +589,6 @@ class TestPkgHandler(unit_tests.ExtendedTestCase):
         )
         unknown_pkg = TestPkgHandler.create_pkg_obj(name="unknown", version="1", release="1")
         self.assertRaises(SystemExit, pkghandler.get_rpm_header, unknown_pkg)
-
-    class ReturnPackagesMocked(unit_tests.MockFunction):
-        def __call__(self, patterns=None):
-            if patterns is None:
-                patterns = []
-            if patterns and patterns != ["installed_pkg"]:
-                return []
-            pkg_obj = TestPkgHandler.TestPkgObj()
-            pkg_obj.name = "installed_pkg"
-            return [pkg_obj]
-
-    class QueryMocked(unit_tests.MockFunction):
-        def __init__(self):
-            self.filter_called = 0
-            self.installed_called = 0
-            self.stop_iteration = False
-            self.pkg_obj = None
-
-        def __call__(self, *args):
-            self._setup_pkg()
-            return self
-
-        def __iter__(self):  # pylint: disable=non-iterator-returned
-            return self
-
-        def __next__(self):
-            if self.stop_iteration or not self.pkg_obj:
-                self.stop_iteration = False
-                raise StopIteration
-            self.stop_iteration = True
-            return self.pkg_obj
-
-        def _setup_pkg(self):
-            self.pkg_obj = TestPkgHandler.TestPkgObj()
-            self.pkg_obj.name = "installed_pkg"
-
-        def filterm(self, empty):
-            # Called internally in DNF when calling fill_sack - ignore, not needed
-            pass
-
-        def installed(self):
-            self.installed_called += 1
-            return self
-
-        def filter(self, name__glob):
-            self.filter_called += 1
-            if name__glob and name__glob == "installed_pkg":
-                self._setup_pkg()
-            elif name__glob:
-                self.pkg_obj = None
-            return self
-
-    if hasattr(pkgmanager, "rpmsack"):
-
-        @unit_tests.mock(
-            pkgmanager.rpmsack.RPMDBPackageSack,
-            "returnPackages",
-            ReturnPackagesMocked(),
-        )
-        def test_get_installed_pkg_objects_yum(self):
-            self.get_installed_pkg_objects()
-
-    elif hasattr(pkgmanager, "query"):
-
-        @unit_tests.mock(pkgmanager.query, "Query", QueryMocked())
-        def test_get_installed_pkg_objects_dnf(self):
-            self.get_installed_pkg_objects()
-
-    else:
-        assert not is_rpm_based_os()
-
-    def get_installed_pkg_objects(self):
-        pkgs = pkghandler.get_installed_pkg_objects()
-
-        self.assertEqual(len(pkgs), 1)
-        self.assertEqual(pkgs[0].name, "installed_pkg")
-
-        pkgs = pkghandler.get_installed_pkg_objects("installed_pkg")
-
-        self.assertEqual(len(pkgs), 1)
-        self.assertEqual(pkgs[0].name, "installed_pkg")
-
-        pkgs = pkghandler.get_installed_pkg_objects("non_existing")
-
-        self.assertEqual(len(pkgs), 0)
 
     class PrintPkgInfoMocked(unit_tests.MockFunction):
         def __init__(self):
@@ -1970,3 +1938,45 @@ def test_clean_yum_metadata(ret_code, expected, monkeypatch, caplog):
 
     pkghandler.clean_yum_metadata()
     assert expected in caplog.records[-1].message
+
+
+@pytest.mark.skipif(
+    pkgmanager.TYPE != "yum",
+    reason="No yum module detected on the system, skipping it.",
+)
+@pytest.mark.parametrize(
+    ("name", "version", "release", "arch", "total_pkgs_installed"),
+    (
+        (None, None, None, None, 1),
+        ("installed_pkg", "1", "20.1", "x86_64", 1),
+        ("non_existing", None, None, None, 0),  # Special name to return an empty list.
+    ),
+)
+def test_get_installed_pkg_objects_yum(name, version, release, arch, total_pkgs_installed, monkeypatch):
+    monkeypatch.setattr(pkgmanager.rpmsack.RPMDBPackageSack, "returnPackages", ReturnPackagesMocked())
+    pkgs = pkghandler.get_installed_pkg_objects(name, version, release, arch)
+
+    assert len(pkgs) == total_pkgs_installed
+    if total_pkgs_installed > 0:
+        assert pkgs[0].name == "installed_pkg"
+
+
+@pytest.mark.skipif(
+    pkgmanager.TYPE != "dnf",
+    reason="No dnf module detected on the system, skipping it.",
+)
+@pytest.mark.parametrize(
+    ("name", "version", "release", "arch", "total_pkgs_installed"),
+    (
+        (None, None, None, None, 1),
+        ("installed_pkg", "1", "20.1", "x86_64", 1),
+        ("non_existing", None, None, None, 0),
+    ),
+)
+def test_get_installed_pkg_objects_dnf(name, version, release, arch, total_pkgs_installed, monkeypatch):
+    monkeypatch.setattr(pkgmanager.query, "Query", QueryMocked())
+    pkgs = pkghandler.get_installed_pkg_objects(name, version, release, arch)
+
+    assert len(pkgs) == total_pkgs_installed
+    if total_pkgs_installed > 0:
+        assert pkgs[0].name == "installed_pkg"
