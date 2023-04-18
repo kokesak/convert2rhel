@@ -6,7 +6,7 @@ curl -o /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release https://www.redhat.com/secur
 
 curl --create-dirs -o /etc/rhsm/ca/redhat-uep.pem https://ftp.redhat.com/redhat/convert2rhel/redhat-uep.pem
 
-version=$(grep VERSION_ID= /etc/os-release | grep -o [0-9])
+version=$(grep VERSION_ID= /etc/os-release | grep -o '[0-9]' | head -n 1)
 
 curl -o /etc/yum.repos.d/convert2rhel.repo https://ftp.redhat.com/redhat/convert2rhel/$version/convert2rhel.repo
 
