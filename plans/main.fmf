@@ -29,15 +29,15 @@ adjust+:
         DEBUG: 1
 
 prepare:
-    - name: install c2r released version for 8 major
-      how: shell
-      script: bash tests/c2r-installation.sh
     - name: main preparation step
       how: ansible
       playbook: tests/ansible_collections/main.yml
     - name: reboot system after update
       how: ansible
       playbook: tests/ansible_collections/roles/reboot/main.yml
+    - name: install c2r released version for 8 major
+      how: shell
+      script: bash tests/c2r-installation.sh
     - name: install latest copr build
       how: install
       copr: '@oamg/convert2rhel'
