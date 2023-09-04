@@ -210,7 +210,7 @@ def test_rhsm_error_logged(convert2rhel):
         c2r.expect("Check if loaded kernel modules are not tainted")
         c2r.sendcontrol("c")
 
-        # TODO: should this be removed?
+        # TODO [mlitwora]: should this display?
         # assert c2r.expect("No RHSM certificates found to be removed.", timeout=300) == 0
 
     # Verify the error message is not present in the log file
