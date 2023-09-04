@@ -206,7 +206,8 @@ def test_rhsm_error_logged(convert2rhel):
 
         # Wait until we reach that part, as the RHEL certificate will be
         # already be present.
-        assert c2r.expect("Prepare: Check that DBus Daemon is running") == 0
+        # assert c2r.expect("Prepare: Check that DBus Daemon is running") == 0
+        c2r.expect("Check if loaded kernel modules are not tainted")
         c2r.sendcontrol("c")
 
         # TODO: should this be removed?
